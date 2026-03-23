@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>扬州杖头木偶 - 手势交互体验</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { margin: 0; background-color: #000; overflow: hidden; font-family: 'Noto Serif SC', serif; }
+
+        /* ================= 开场页 ================= */
+        #splash-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url('image/6.jpg'); 
+            background-size: cover;
+            background-position: center;
+            z-index: 999; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            transition: opacity 1s ease;
+        }
+
+        .splash-title {
+            width: 550px; 
+            max-width: 80%; 
+            margin-top: 80px; 
+            margin-bottom: 0px; 
+            transform: translateY(60px); 
+            filter: drop-shadow(0 4px 10px rgba(0,0,0,0.6)); 
+        }
+
+        .splash-subtitle {
+            font-size: 18px; 
+            color: #EFEBE0; 
+            letter-spacing: 4px; 
+            transform: translateX(180px) translateY(-20px);
+            margin-bottom: 20px; 
+        }
+        
+        .start-btn {
+            width: 450px;  
+            height: 198px; 
+            background-image: url('image/kong.png');
+            background-size: contain;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-color: transparent;
+            border: none; 
+            color: #EFEBE0; 
+            font-size: 20px; 
+            font-family: 'Noto Serif SC', serif;
+            letter-spacing: 6px;
+            cursor: pointer; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            transition: all 0.3s ease; 
+        }
+
+        .start-btn:hover { 
+            background-image: url('image/shi.png');
+            color: #080808; 
+            font-weight: bold;
+            transform: scale(1.05); 
+            filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.4)); 
+        }
+        
+        .btn-text {
+            display: inline-block;
+            transform: translateX(9px) translateY(10px); 
+        }
+
+        /* ================= 舞台与摄像 ================= */
+        #webcam {
+            position: absolute; width: 100%; height: 100%;
+            object-fit: cover; transform: scaleX(-1);
+            opacity: 0.15; z-index: 0;
+        }
+        
+        #vignette-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.85) 100%);
+            z-index: 5; pointer-events: none;
+        }
+
+        #puppet-video {
+            position: absolute; opacity: 0; 
+            width: 480px; height: 640px; 
+            object-fit: contain; 
+            border-radius: 12px;
+            pointer-events: none; z-index: 10;
+            transform-origin: bottom center; 
+            mix-blend-mode: screen; background-color: transparent;
+        }
+
+        #ar-canvas {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; z-index: 20; pointer-events: none; 
+        }
+
+        /* ================= 左侧UI界面 ================= */
+        #status-ui {
+            position: absolute; top: 30px; left: 30px; 
+            width: 320px; 
+            color: #EFEBE0; 
+            background: rgba(41, 50, 79, 0.5); 
+            padding: 24px; 
+            border-radius: 16px; 
+            z-index: 100;
+            font-size: 18px; 
+            line-height: 1.6; 
+            pointer-events: auto; 
+            border: 2px solid rgba(239, 235, 224, 0.2);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.5);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px); 
+            display: none; 
+            flex-direction: column;
+            transition: all 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        #status-ui.collapsed {
+            transform: translateX(calc(-100% + 25px)); 
+            opacity: 0.5; 
+            cursor: pointer;
+        }
+
+        #status-ui.collapsed:hover {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        #status-ui::after {
+            content: '▶';
+            position: absolute;
+            right: 6px; 
+            top: 50%; transform: translateY(-50%);
+            color: #FFD700;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #status-ui.collapsed::after {
+            opacity: 1;
+        }
+        
+        .hint-video {
+            width: 100%; 
+            height: auto;
+            border-radius: 10px; 
+            margin: 15px 0; 
+            object-fit: cover;
+            mix-blend-mode: screen; 
+        }
+
+        .chapter-title { 
+            font-size: 26px; 
+            font-weight: bold; 
+            color: #E2ccA8; 
+            margin-bottom: 5px; 
+            padding-bottom: 5px; 
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); 
+        }
+        
+        .highlight { color: #FFFFFF; font-weight: bold; font-size: 22px; text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        .drawing-text { color: #FFD700; animation: pulse 1.5s infinite; font-weight: bold; }
+        @keyframes pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+
+        /* ================= 右侧导航栏 ================= */
+        #chapter-nav {
+            position: absolute; right: 25px; top: 50%; transform: translateY(-50%);
+            display: none; flex-direction: column; gap: 15px; z-index: 100; align-items: flex-end; 
+        }
+
+        .nav-item {
+            display: flex; align-items: center; width: fit-content; min-width: 250px; 
+            background: rgba(41, 50, 79, 0.5); 
+            border: 1px solid rgba(239, 235, 224, 0.15);
+            padding: 8px 15px 8px 8px; border-radius: 50px; backdrop-filter: blur(8px);
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); opacity: 0.6; 
+        }
+
+        .nav-avatar {
+            width: 72px; height: 72px; border-radius: 50%; object-fit: cover; 
+            margin-right: 18px; border: 2px solid rgba(239, 235, 224, 0.3);
+            background-color: #1a1a1a; transition: all 0.4s ease; flex-shrink: 0; 
+        }
+
+        .nav-info { display: flex; flex-direction: column; justify-content: center; }
+        
+        .nav-name { 
+            color: rgba(239, 235, 224, 0.6); font-size: 13px; font-family: 'Noto Serif SC', serif; 
+            white-space: nowrap; margin-bottom: 2px; transition: all 0.4s ease; 
+        }
+        
+        .nav-gesture { 
+            color: rgba(239, 235, 224, 0.8); font-size: 15px; font-family: sans-serif; 
+            white-space: nowrap; transition: all 0.4s ease; 
+        }
+
+        .nav-item.active {
+            opacity: 1; background: rgba(255, 215, 0, 0.15); border: 1px solid #E2ccA8; 
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.4); transform: translateX(-15px) scale(1.05); 
+        }
+        .nav-item.active .nav-avatar { border-color: #E2ccA8; }
+        .nav-item.active .nav-name { color: rgba(226, 196, 168, 0.9); font-size: 14px; text-shadow: 0 0 5px rgba(255, 215, 0, 0.3); }
+        .nav-item.active .nav-gesture { color: #FFFFFF; font-size: 19px; font-weight: bold; text-shadow: 0 0 10px rgba(255, 255, 255, 0.6); }
+
+        /* ================= 新手教程气泡 ================= */
+        #tour-tooltip {
+            position: absolute; background: rgba(41, 50, 79, 0.95); border: 1px solid #A0FFEF; color: #A0FFEF;
+            padding: 15px 25px; border-radius: 8px; font-size: 16px; font-weight: bold; font-family: 'Noto Serif SC', serif;
+            letter-spacing: 1px; white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.6), 0 0 15px rgba(255,215,0,0.3);
+            opacity: 0; pointer-events: none; transition: all 0.6s cubic-bezier(0.25, 0.8, 0.25, 1); z-index: 1000;
+        }
+
+        #tour-tooltip::after {
+            content: ''; position: absolute; width: 12px; height: 12px; background: rgba(41, 50, 79, 0.95); transition: all 0.6s;
+        }
+
+        .tour-step-0 { top: 40%; left: 50%; right: auto; bottom: auto; opacity: 1 !important; transform: translate(-50%, -50%) scale(1.1); text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.8), 0 0 30px rgba(255,215,0,0.4); }
+        .tour-step-0::after { display: none; }
+
+        .tour-step-1 { top: 60px; left: 390px; opacity: 1 !important; transform: translateX(0); }
+        .tour-step-1::after { top: 20px; left: -7px; right: auto; border-bottom: 1px solid #FFD700; border-left: 1px solid #FFD700; border-top: none; border-right: none; transform: rotate(45deg); }
+
+        .tour-step-2 { top: 45%; right: 360px; left: auto; opacity: 1 !important; transform: translateY(-50%); }
+        .tour-step-2::after { top: 50%; right: -7px; left: auto; border-top: 1px solid #FFD700; border-right: 1px solid #FFD700; border-bottom: none; border-left: none; transform: translateY(-50%) rotate(45deg); }
+
+        .tour-step-3 { top: 180px; left: 390px; right: auto !important; opacity: 1 !important; transform: translateX(0); }
+        .tour-step-3::after { top: 50%; left: -7px; right: auto; border-bottom: 1px solid #FFD700; border-left: 1px solid #FFD700; border-top: none; border-right: none; transform: translateY(-50%) rotate(45deg); }
+
+        .tour-step-4 { top: auto; bottom: 130px; left: 50px; right: auto; opacity: 1 !important; transform: translateX(0); }
+        .tour-step-4::after { top: auto; bottom: -7px; left: 30px; right: auto; border-bottom: 1px solid #FFD700; border-right: 1px solid #FFD700; border-top: none; border-left: none; transform: rotate(45deg); }
+
+        .tour-step-5 { top: 50%; left: 50%; right: auto; bottom: auto; opacity: 1 !important; transform: translate(-50%, -50%) scale(1.3); text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.8), 0 0 30px rgba(255,215,0,0.5); }
+        .tour-step-5::after { display: none; }
+
+        /* ================= 留影按钮 ================= */
+        #photo-btn {
+            position: absolute; bottom: 40px; left: 40px; 
+            width: 140px; height: 140px; 
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            z-index: 100;
+            display: none; 
+            justify-content: center;
+            align-items: center;
+            padding: 0;
+            transition: all 0.3s ease;
+            
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: contain;
+            background-image: url('image/window_kong.png');
+            
+            filter: drop-shadow(0 4px 10px rgba(0,0,0,0.6));
+        }
+
+        #photo-btn:hover {
+            background-image: url('image/window_shi.png');
+            transform: scale(1.05);
+            filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.4));
+        }
+
+        .photo-btn-text {
+            display: inline-block;
+            color: #EFEBE0; 
+            font-family: 'Noto Serif SC', serif;
+            font-size: 19px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            transform: translateY(-3px);
+            transition: color 0.3s ease;
+        }
+
+        #photo-btn:hover .photo-btn-text {
+            color: #080808; 
+            text-shadow: none;
+        }
+
+        #countdown-ui {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 150px; font-weight: bold; font-family: 'Noto Serif SC', serif;
+            color: #EFEBE0; text-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
+            z-index: 900; pointer-events: none; display: none; opacity: 0; transition: opacity 0.2s;
+        }
+
+        #flash-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #ffffff; z-index: 9999; pointer-events: none; opacity: 0; display: none;
+        }
+    </style>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <audio id="start-sfx" src="audio/chushi.mp3" preload="auto"></audio>
+    <audio id="tour-audio-0" src="audio/tour0.mp3" preload="auto"></audio>
+    <audio id="tour-audio-1" src="audio/tour1.mp3" preload="auto"></audio>
+    <audio id="tour-audio-2" src="audio/tour2.mp3" preload="auto"></audio>
+    <audio id="tour-audio-3" src="audio/tour3.mp3" preload="auto"></audio>
+    <audio id="tour-audio-4" src="audio/tour4.mp3" preload="auto"></audio>
+    <audio id="tour-audio-5" src="audio/tour5.mp3" preload="auto"></audio>
+
+    <audio id="success-sfx" src="audio/success.mp3" preload="auto"></audio>
+
+    <div id="splash-screen">
+        <img src="image/touming.png" class="splash-title" alt="扦姿百态">
+        <div class="splash-subtitle">扬州杖头木偶 手势交互体验</div>
+        <button class="start-btn" id="start-btn"><span class="btn-text">点击开启</span></button>
+    </div>
+
+    <video id="webcam" playsinline></video>
+    <div id="vignette-overlay"></div>
+    <video id="puppet-video" preload="auto"></video>
+    <canvas id="ar-canvas"></canvas>
+    
+    <div id="status-ui">
+        <div id="hint-container">
+            <div style="text-align: center; padding: 30px 10px;">
+                <div style="font-size: 22px; color: #e2cca8; font-weight: bold; animation: pulse 1.5s infinite;">⏳ 正在唤醒木偶...</div>
+                <div style="font-size: 15px; color: rgba(239, 235, 224, 0.8); margin-top: 15px; line-height: 1.6;">
+                    请允许浏览器使用摄像头<br>首次加载时间可能较长
+                </div>
+            </div>
+        </div>
+        <div id="status-text" style="font-size: 16px; text-align: left; line-height: 1.8;"></div>
+    </div>
+    
+    <div id="chapter-nav">
+        <div class="nav-item" id="nav-item-1">
+            <img src="image/avatar1.png" class="nav-avatar" onerror="this.style.opacity=0">
+            <div class="nav-info">
+                <div class="nav-name">《戏耍佛珠》</div>
+                <div class="nav-gesture">👉 右手比 1</div>
+            </div>
+        </div>
+        <div class="nav-item" id="nav-item-2">
+            <img src="image/avatar2.png" class="nav-avatar" onerror="this.style.opacity=0">
+            <div class="nav-info">
+                <div class="nav-name">《琼花仙子》</div>
+                <div class="nav-gesture">✌️ 右手比 2</div>
+            </div>
+        </div>
+        <div class="nav-item" id="nav-item-3">
+            <img src="image/avatar3.png" class="nav-avatar" onerror="this.style.opacity=0">
+            <div class="nav-info">
+                <div class="nav-name">《嫦娥奔月》</div>
+                <div class="nav-gesture">👌 右手比 OK</div>
+            </div>
+        </div>
+        <div class="nav-item" id="nav-item-4">
+            <img src="image/avatar4.png" class="nav-avatar" onerror="this.style.opacity=0">
+            <div class="nav-info">
+                <div class="nav-name">《扇韵》</div>
+                <div class="nav-gesture">🖐️ 右手比 4</div>
+            </div>
+        </div>
+        <div class="nav-item" id="nav-item-5">
+            <img src="image/avatar5.png" class="nav-avatar" onerror="this.style.opacity=0">
+            <div class="nav-info">
+                <div class="nav-name">《木偶书画》</div>
+                <div class="nav-gesture">✋ 右手全张开</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tour-tooltip"></div>
+
+    <button id="photo-btn">
+        <span class="photo-btn-text">📸 留影</span>
+    </button>
+
+    <div id="countdown-ui">5</div>
+    <div id="flash-overlay"></div>
+
+<script>
+    const puppetVideo = document.getElementById('puppet-video');
+    const successSfx = document.getElementById('success-sfx');
+    const statusUi = document.getElementById('status-ui');
+    const chapterNav = document.getElementById('chapter-nav');
+    const webcamElement = document.getElementById('webcam');
+    const arCanvas = document.getElementById('ar-canvas');
+    const ctx = arCanvas.getContext('2d');
+    
+    const photoBtn = document.getElementById('photo-btn');
+    const countdownUi = document.getElementById('countdown-ui');
+    const flashOverlay = document.getElementById('flash-overlay');
+    
+    const VIDEO_SOURCES = { 1: "videos/1.mp4", 2: "videos/2.mp4", 3: "videos/3.mp4", 4: "videos/5.mp4", 5: "videos/6.mp4" };
+    
+    const playNames = ["《戏耍佛珠》", "《琼花仙子》", "《嫦娥奔月》", "《扇韵》", "《木偶书画》"];
+
+    let isTourActive = true; 
+    let hasTriggeredCurrentChapter = false;
+
+    let currentChapter = 1;
+    let lastRenderedChapter = -1; 
+
+    const totalChapters = 5; 
+    let lastSwipeTime = 0; 
+
+    let rightHandPreviousY = 0;   
+    let leftHandPreviousY = 0; 
+    let leftHandShakeBuffer = [];  
+    let leftHandTiltBuffer = []; 
+    let rightHandGestureBuffer = [];
+    let isActionPlaying = false; 
+
+    let inkPaths = []; 
+    let currentPath = null; 
+    let particles = []; 
+    let smoothedWritingPos = { x: 0, y: 0 }; 
+    let targetWritingPos = { x: 0, y: 0 }; 
+    let isWriting = false; 
+
+    let puppetPhysics = {
+        x: window.innerWidth / 2, y: window.innerHeight,
+        targetX: window.innerWidth / 2, targetY: window.innerHeight,
+        angle: 0, targetAngle: 0, scale: 1, targetScale: 1,
+        opacity: 0, targetOpacity: 0
+    };
+    let globalRightFistActive = false;
+    let globalMediaPipeResults = null; 
+
+    function resizeCanvas() { arCanvas.width = window.innerWidth; arCanvas.height = window.innerHeight; }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas(); 
+
+    function startGuidedTour() {
+        const tooltip = document.getElementById('tour-tooltip');
+
+        setTimeout(() => {
+            tooltip.className = 'tour-step-0';
+            tooltip.innerHTML = "✨ 欢迎体验扬州杖头木偶交互装置，让我为您简单介绍玩法~";
+            document.getElementById('tour-audio-0').play().catch(e=>{}); 
+        }, 3000); 
+
+        setTimeout(() => {
+            tooltip.className = 'tour-step-1';
+            tooltip.innerHTML = "📍 1. 这里显示当前演绎的剧目名称";
+            document.getElementById('tour-audio-1').play().catch(e=>{}); 
+        }, 9000); 
+
+        setTimeout(() => {
+            tooltip.className = 'tour-step-2';
+            tooltip.innerHTML = "✨ 2. 右手比出对应数字，即可自主切换剧目！";
+            document.getElementById('tour-audio-2').play().catch(e=>{}); 
+        }, 13000); 
+
+        setTimeout(() => {
+            tooltip.className = 'tour-step-3';
+            tooltip.innerHTML = "🖐️ 3. 模仿这里的手势动作，就能操纵木偶啦！";
+            document.getElementById('tour-audio-3').play().catch(e=>{}); 
+        }, 17000); 
+
+        setTimeout(() => {
+            tooltip.className = 'tour-step-4';
+            tooltip.innerHTML = "📸 4. 点击留影，记录你的专属木偶瞬间！";
+            document.getElementById('tour-audio-4').play().catch(e=>{}); 
+        }, 21000); 
+
+        setTimeout(() => {
+            tooltip.className = 'tour-step-5';
+            tooltip.innerHTML = "🎉 准备就绪，请举起双手尽情体验吧！";
+            document.getElementById('tour-audio-5').play().catch(e=>{}); 
+        }, 25000); 
+
+        setTimeout(() => {
+            tooltip.className = '';
+            tooltip.style.opacity = 0;
+            
+            isTourActive = false;
+            let hv = document.getElementById('current-hint-video');
+            if(hv) hv.play().catch(e=>{}); 
+            
+        }, 29000); 
+    }
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+        const startSfx = document.getElementById('start-sfx');
+        startSfx.currentTime = 0; 
+        startSfx.play().catch(e => console.log("音效未加载"));
+
+        document.getElementById('splash-screen').style.opacity = '0';
+        puppetVideo.muted = false; 
+
+        setTimeout(() => {
+            document.getElementById('splash-screen').style.display = 'none';
+            statusUi.style.display = 'flex'; 
+            photoBtn.style.display = 'flex'; 
+            chapterNav.style.display = 'flex'; 
+            camera.start(); 
+            puppetVideo.play().then(()=>puppetVideo.pause()).catch(e=>{}); 
+
+            startGuidedTour();
+
+        }, 1000);
+    });
+
+    puppetVideo.addEventListener('ended', () => {
+        if(currentChapter !== 5) {
+            isActionPlaying = false; 
+            puppetVideo.currentTime = 0; 
+        }
+    });
+
+    photoBtn.addEventListener('click', () => {
+        photoBtn.style.display = 'none'; 
+        countdownUi.style.display = 'block';
+        
+        let count = 5;
+        countdownUi.innerText = count;
+        countdownUi.style.opacity = 1;
+
+        const timer = setInterval(() => {
+            count--;
+            if (count > 0) {
+                countdownUi.innerText = count;
+                countdownUi.style.transform = `translate(-50%, -50%) scale(1.2)`;
+                setTimeout(() => countdownUi.style.transform = `translate(-50%, -50%) scale(1)`, 150);
+            } else {
+                clearInterval(timer);
+                countdownUi.style.display = 'none';
+                executeScreenshot(); 
+            }
+        }, 1000);
+    });
+
+    function executeScreenshot() {
+        flashOverlay.style.display = 'block';
+        flashOverlay.style.opacity = 1;
+        
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = window.innerWidth;
+        offCanvas.height = window.innerHeight;
+        const offCtx = offCanvas.getContext('2d');
+
+        offCtx.fillStyle = '#000000';
+        offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+
+        offCtx.save();
+        offCtx.globalAlpha = 0.15; 
+        offCtx.scale(-1, 1);
+        offCtx.drawImage(webcamElement, -offCanvas.width, 0, offCanvas.width, offCanvas.height);
+        offCtx.restore();
+        
+        const gradient = offCtx.createRadialGradient(
+            offCanvas.width/2, offCanvas.height/2, offCanvas.width * 0.2, 
+            offCanvas.width/2, offCanvas.height/2, Math.max(offCanvas.width, offCanvas.height) * 0.8
+        );
+        gradient.addColorStop(0, 'transparent');
+        gradient.addColorStop(1, 'rgba(0,0,0,0.85)');
+        offCtx.fillStyle = gradient;
+        offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+
+        if (puppetPhysics.opacity > 0 && puppetVideo.videoWidth > 0) {
+            offCtx.save();
+            offCtx.globalCompositeOperation = 'screen';
+            offCtx.globalAlpha = puppetPhysics.opacity;
+            offCtx.imageSmoothingEnabled = true;
+            offCtx.imageSmoothingQuality = 'high';
+            
+            offCtx.translate(puppetPhysics.x, puppetPhysics.y + 64);
+            offCtx.rotate(puppetPhysics.angle);
+            offCtx.scale(puppetPhysics.scale, puppetPhysics.scale);
+            
+            let vW = puppetVideo.videoWidth;
+            let vH = puppetVideo.videoHeight;
+            let containScale = Math.min(480 / vW, 640 / vH);
+            let drawW = vW * containScale;
+            let drawH = vH * containScale;
+            
+            let offsetX = -240 + (480 - drawW) / 2;
+            let offsetY = -640 + (640 - drawH) / 2;
+
+            offCtx.drawImage(puppetVideo, offsetX, offsetY, drawW, drawH);
+            offCtx.restore();
+        }
+
+        offCtx.drawImage(arCanvas, 0, 0);
+
+        offCtx.save();
+        offCtx.fillStyle = 'rgba(239, 235, 224, 0.9)';
+        offCtx.font = 'bold 24px "Noto Serif SC"';
+        offCtx.textAlign = 'right';
+        offCtx.shadowColor = 'rgba(0,0,0,0.8)';
+        offCtx.shadowBlur = 4;
+        offCtx.fillText('扬州杖头木偶 扦姿百态', offCanvas.width - 30, offCanvas.height - 40);
+        offCtx.font = '14px "Noto Serif SC"';
+        offCtx.fillText('手势交互体验留影', offCanvas.width - 30, offCanvas.height - 15);
+        offCtx.restore();
+
+        const link = document.createElement('a');
+        link.download = `扦姿百态_留影_${Date.now()}.png`;
+        link.href = offCanvas.toDataURL('image/png');
+        link.click();
+
+        setTimeout(() => {
+            flashOverlay.style.opacity = 0;
+            setTimeout(() => {
+                flashOverlay.style.display = 'none';
+                photoBtn.style.display = 'flex';
+            }, 300);
+        }, 100);
+    }
+
+    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    
+    hands.onResults((results) => { 
+        globalMediaPipeResults = results; 
+        onResultsMain(results); 
+    }); 
+
+    const camera = new Camera(webcamElement, { onFrame: async () => { await hands.send({image: webcamElement}); }, width: 1280, height: 720 });
+
+    function getDistance(p1, p2) { return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2)); }
+    function isFingerOpen(hand, tipIdx, pipIdx) { return getDistance(hand[0], hand[tipIdx]) > getDistance(hand[0], hand[pipIdx]); }
+    
+    // 💥 完全还原最经典的严谨判定：四指必须全部弯曲
+    function isFist(hand) { return !isFingerOpen(hand, 8, 6) && !isFingerOpen(hand, 12, 10) && !isFingerOpen(hand, 16, 14) && !isFingerOpen(hand, 20, 18); }
+
+    function isNumber1(hand) { return isFingerOpen(hand, 8, 6) && !isFingerOpen(hand, 12, 10) && !isFingerOpen(hand, 16, 14) && !isFingerOpen(hand, 20, 18); }
+    function isNumber2(hand) { return isFingerOpen(hand, 8, 6) && isFingerOpen(hand, 12, 10) && !isFingerOpen(hand, 16, 14) && !isFingerOpen(hand, 20, 18); }
+    function isOK(hand) { const pinchDist = getDistance(hand[4], hand[8]); return pinchDist < 0.05 && isFingerOpen(hand, 12, 10) && isFingerOpen(hand, 16, 14); }
+    function isThumbFolded(hand) { return getDistance(hand[4], hand[17]) < (getDistance(hand[5], hand[17]) * 1.2); }
+    function isNumber4(hand) { return isFingerOpen(hand, 8, 6) && isFingerOpen(hand, 12, 10) && isFingerOpen(hand, 16, 14) && isFingerOpen(hand, 20, 18) && isThumbFolded(hand); }
+    function isNumber5(hand) { return isFingerOpen(hand, 8, 6) && isFingerOpen(hand, 12, 10) && isFingerOpen(hand, 16, 14) && isFingerOpen(hand, 20, 18) && !isThumbFolded(hand); }
+    function detectShake(yBuffer) { return yBuffer.length >= 5 && (Math.max(...yBuffer) - Math.min(...yBuffer)) > 0.12; }
+    function getHandTiltAngle(hand) { return Math.atan2(hand[13].y - hand[5].y, hand[13].x - hand[5].x); }
+    function detectTwist(buffer) {
+        if (buffer.length < 5) return "none";
+        let delta = buffer[buffer.length - 1] - buffer[0];
+        while (delta > Math.PI) delta -= 2 * Math.PI; while (delta < -Math.PI) delta += 2 * Math.PI;
+        if (delta > 0.5) return "twist-right"; if (delta < -0.5) return "twist-left"; return "none";
+    }
+
+    function renderPhysicsLoop() {
+        ctx.clearRect(0, 0, arCanvas.width, arCanvas.height); 
+        ctx.save();
+
+        if (globalMediaPipeResults && globalMediaPipeResults.multiHandLandmarks) {
+            const connectorConfig = { color: 'rgba(255, 255, 255, 0.6)', lineWidth: 1 }; 
+            const landmarkConfig = { color: '#6afdce', lineWidth: 1, radius: 2 }; 
+            for (const landmarks of globalMediaPipeResults.multiHandLandmarks) {
+                const mirroredLandmarks = landmarks.map(lm => ({ ...lm, x: 1 - lm.x }));
+                drawConnectors(ctx, mirroredLandmarks, HAND_CONNECTIONS, connectorConfig);
+                drawLandmarks(ctx, mirroredLandmarks, landmarkConfig);
+            }
+        }
+
+        let prevX = puppetPhysics.x;
+        let prevY = puppetPhysics.y;
+
+        puppetPhysics.x += (puppetPhysics.targetX - puppetPhysics.x) * 0.15;
+        puppetPhysics.y += (puppetPhysics.targetY - puppetPhysics.y) * 0.15;
+        puppetPhysics.scale += (puppetPhysics.targetScale - puppetPhysics.scale) * 0.15;
+        puppetPhysics.opacity += (puppetPhysics.targetOpacity - puppetPhysics.opacity) * 0.2; 
+        
+        let angleDiff = puppetPhysics.targetAngle - puppetPhysics.angle;
+        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+        puppetPhysics.angle += angleDiff * 0.15;
+
+        puppetVideo.style.opacity = puppetPhysics.opacity;
+        puppetVideo.style.left = `${puppetPhysics.x - puppetVideo.offsetWidth / 2}px`;
+        puppetVideo.style.top = `${puppetPhysics.y - puppetVideo.offsetHeight * 0.9}px`;
+        puppetVideo.style.transform = `scale(${puppetPhysics.scale}) rotate(${puppetPhysics.angle}rad)`;
+
+        let velX = puppetPhysics.x - prevX;
+        let velY = puppetPhysics.y - prevY;
+        let speed = Math.sqrt(velX * velX + velY * velY);
+
+        if (speed > 25 && puppetPhysics.opacity > 0.5) {
+            for(let i=0; i<3; i++) {
+                particles.push({
+                    x: puppetPhysics.x + (Math.random()-0.5)*80,
+                    y: puppetPhysics.y - 150 + (Math.random()-0.5)*150,
+                    vx: -velX * 0.15 + (Math.random()-0.5)*5, 
+                    vy: -velY * 0.15 + (Math.random()-0.5)*5,
+                    size: Math.random() * 6 + 2,
+                    alpha: 0.6,
+                    type: 'aura' 
+                });
+            }
+        }
+
+        if (targetWritingPos.x !== 0 && targetWritingPos.y !== 0) {
+            if (smoothedWritingPos.x === 0) smoothedWritingPos = {...targetWritingPos};
+            smoothedWritingPos.x += (targetWritingPos.x - smoothedWritingPos.x) * 0.3; 
+            smoothedWritingPos.y += (targetWritingPos.y - smoothedWritingPos.y) * 0.3;
+        }
+
+        if (currentChapter === 5 && isWriting) {
+            if (!currentPath) {
+                currentPath = { points: [], birthTime: Date.now() };
+                inkPaths.push(currentPath);
+            }
+            let len = currentPath.points.length;
+            if (len === 0 || Math.abs(currentPath.points[len-1].x - smoothedWritingPos.x) > 1 || Math.abs(currentPath.points[len-1].y - smoothedWritingPos.y) > 1) {
+                currentPath.points.push({...smoothedWritingPos});
+            }
+        } else {
+            currentPath = null; 
+        }
+
+        const now = Date.now();
+        for (let i = inkPaths.length - 1; i >= 0; i--) {
+            if (now - inkPaths[i].birthTime > 12000) {
+                let pathToShatter = inkPaths[i].points;
+                for (let j = 0; j < pathToShatter.length; j += 2) {
+                    let pt = pathToShatter[j];
+                    particles.push({
+                        x: pt.x, y: pt.y,
+                        vx: (Math.random() - 0.5) * 12, vy: (Math.random() - 0.8) * 10,
+                        size: Math.random() * 4 + 1, alpha: 1, type: 'ink' 
+                    });
+                }
+                inkPaths.splice(i, 1);
+            }
+        }
+
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.shadowColor = 'rgba(255, 215, 0, 0.8)'; 
+        ctx.shadowBlur = 15;
+        
+        for (let pathObj of inkPaths) {
+            let path = pathObj.points;
+            if (path.length < 2) continue;
+            
+            ctx.beginPath();
+            ctx.moveTo(path[0].x, path[0].y);
+            
+            for (let i = 1; i < path.length - 1; i++) {
+                let xc = (path[i].x + path[i + 1].x) / 2;
+                let yc = (path[i].y + path[i + 1].y) / 2;
+                ctx.quadraticCurveTo(path[i].x, path[i].y, xc, yc);
+            }
+            ctx.lineTo(path[path.length - 1].x, path[path.length - 1].y);
+            
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = `rgba(255, 255, 255, 0.9)`; 
+            ctx.stroke();
+        }
+
+        if (particles.length > 0) {
+            ctx.shadowBlur = 10;
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx; p.y += p.vy;
+                p.vx *= 0.92; p.vy *= 0.92; p.vy -= 0.05; 
+                p.alpha -= (p.type === 'aura' ? 0.05 : 0.02); 
+                p.size *= 0.96;
+                if (p.alpha <= 0.01 || p.size <= 0.5) { particles.splice(i, 1); continue; }
+                
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = p.type === 'aura' ? `rgba(118, 164, 179, ${p.alpha})` : `rgba(255, 215, 0, ${p.alpha})`; 
+                ctx.fill();
+            }
+        }
+        ctx.restore();
+        
+        requestAnimationFrame(renderPhysicsLoop); 
+    }
+    requestAnimationFrame(renderPhysicsLoop);
+
+    function updateNavHighlight(chapter) {
+        for(let i=1; i<=5; i++){
+            let el = document.getElementById(`nav-item-${i}`);
+            if(el) el.classList.remove('active');
+        }
+        let currentEl = document.getElementById(`nav-item-${chapter}`);
+        if(currentEl) currentEl.classList.add('active');
+    }
+
+    function onResultsMain(results) {
+        let rightHand = null; let leftHand = null;
+        if (results.multiHandLandmarks && results.multiHandedness) {
+            for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+                if (results.multiHandedness[i].label === 'Left') rightHand = results.multiHandLandmarks[i]; 
+                if (results.multiHandedness[i].label === 'Right') leftHand = results.multiHandLandmarks[i]; 
+            }
+        }
+
+        if (currentChapter !== lastRenderedChapter) {
+            let chapterHints = [
+                "双手握拳 向上提",
+                "左手弹出 手枪/八字",
+                "左手张开 大幅摇晃",
+                "左手翻转 拧门把手",
+                "捏住双指 丝滑书写"
+            ];
+
+            let hintHtml = `<div style="text-align: center;">`;
+            hintHtml += `<div class="chapter-title">${playNames[currentChapter - 1]}</div>`;
+            
+            hintHtml += `<video id="current-hint-video" src="videos/hint${currentChapter}.mp4" class="hint-video" loop muted playsinline></video>`;
+            
+            hintHtml += `<div class="highlight" style="margin-bottom: 5px;">${chapterHints[currentChapter - 1]}</div>`;
+            hintHtml += `</div>`;
+            
+            document.getElementById('hint-container').innerHTML = hintHtml;
+            
+            let hv = document.getElementById('current-hint-video');
+            if (hv && !isTourActive) {
+                hv.play().catch(e=>{});
+            }
+            
+            let statusTextDiv = document.getElementById('status-text');
+            statusTextDiv.style.borderTop = "2px solid rgba(239, 235, 224, 0.2)";
+            statusTextDiv.style.paddingTop = "12px";
+            statusTextDiv.style.marginTop = "12px";
+
+            updateNavHighlight(currentChapter);
+
+            lastRenderedChapter = currentChapter; 
+        }
+        
+        let statusHtml = "";
+        let shouldPlayVideo = false;
+        globalRightFistActive = false;
+        isWriting = false; 
+
+        // 💥 只有左手数据的记录，不提前更新左手的 PreviousY
+        if (leftHand) {
+            leftHandShakeBuffer.push(leftHand[9].y); 
+            if (leftHandShakeBuffer.length > 10) leftHandShakeBuffer.shift();
+            leftHandTiltBuffer.push(leftHand[5].x - leftHand[17].x); 
+            if (leftHandTiltBuffer.length > 15) leftHandTiltBuffer.shift();
+        } else {
+            leftHandShakeBuffer = [];
+            leftHandTiltBuffer = [];
+        }
+
+        if (rightHand) {
+            if (isFist(rightHand)) {
+                globalRightFistActive = true;
+                rightHandGestureBuffer = []; 
+                
+                puppetPhysics.targetOpacity = 1;
+                puppetPhysics.targetX = (1 - rightHand[0].x) * window.innerWidth;
+                puppetPhysics.targetY = rightHand[0].y * window.innerHeight;
+                
+                let dx = rightHand[0].x - rightHand[9].x; 
+                let dy = rightHand[9].y - rightHand[0].y; 
+                puppetPhysics.targetAngle = Math.atan2(dy, dx) + Math.PI / 2; 
+
+                let handSize = getDistance(rightHand[0], rightHand[9]); 
+                puppetPhysics.targetScale = Math.max(0.6, Math.min(handSize * 5.5, 2.5)); 
+                
+                statusHtml += `✅ 右手：已握住命杆<br>`;
+
+                if (currentChapter === 1) {
+                    if (leftHand && isFist(leftHand)) {
+                        statusHtml += `✅ 左手：已握拳<br>▶️ 请双手【同时】向上举！`;
+                        let rightDelta = rightHandPreviousY - rightHand[0].y;
+                        let leftDelta = leftHandPreviousY - leftHand[0].y;
+                        
+                        if (rightDelta > 0.005 && leftDelta > 0.005 && (rightDelta + leftDelta) > 0.03) {
+                            shouldPlayVideo = true;
+                        }
+                    } else {
+                        statusHtml += `⚠️ 提示：左手也需【握拳】`;
+                    }
+                }
+                // 计算完第一幕的动作差值后，再更新右手的 PreviousY
+                rightHandPreviousY = rightHand[0].y; 
+                
+            } else {
+                puppetPhysics.targetOpacity = 0; 
+                let detectedNum = 0; let gestureName = "";
+                if (isNumber1(rightHand)) { detectedNum = 1; gestureName = "数字 1"; }
+                else if (isNumber2(rightHand)) { detectedNum = 2; gestureName = "数字 2"; }
+                else if (isOK(rightHand)) { detectedNum = 3; gestureName = "OK (代表 3)"; }
+                else if (isNumber4(rightHand)) { detectedNum = 4; gestureName = "数字 4"; }
+                else if (isNumber5(rightHand)) { detectedNum = 5; gestureName = "数字 5"; }
+                
+                if (detectedNum !== 0) {
+                    rightHandGestureBuffer.push(detectedNum);
+                    if (rightHandGestureBuffer.length > 8) rightHandGestureBuffer.shift(); 
+                    if (rightHandGestureBuffer.length === 8 && rightHandGestureBuffer.every(val => val === detectedNum)) {
+                        if (currentChapter !== detectedNum && Date.now() - lastSwipeTime > 1000) { 
+                            currentChapter = detectedNum; 
+                            triggerPageTurn(); 
+                            rightHandGestureBuffer = []; 
+                        }
+                    }
+                } else { rightHandGestureBuffer = []; }
+            }
+        } else { puppetPhysics.targetOpacity = 0; }
+
+        function triggerPageTurn() {
+            puppetVideo.src = VIDEO_SOURCES[currentChapter];
+            isActionPlaying = false;  
+            inkPaths = []; currentPath = null; particles = []; 
+            lastSwipeTime = Date.now();
+            
+            hasTriggeredCurrentChapter = false;
+            statusUi.classList.remove('collapsed');
+        }
+
+        let canCheckLeftHand = leftHand && globalRightFistActive && (!isActionPlaying || currentChapter === 5);
+
+        if (canCheckLeftHand) {
+            const isThumbOpen = isFingerOpen(leftHand, 4, 3);
+            const isIndexOpen = isFingerOpen(leftHand, 8, 6);
+            const isMiddleOpen = isFingerOpen(leftHand, 12, 10);
+            const isPinkyOpen = isFingerOpen(leftHand, 20, 18);
+            const pinchDist = getDistance(leftHand[4], leftHand[8]);
+
+            const isHandFlat = isIndexOpen && isMiddleOpen; 
+            
+            let actionTriggeredThisFrame = false;
+
+            switch (currentChapter) {
+                case 1: break;
+                case 2: if (isThumbOpen && isIndexOpen && !isMiddleOpen && !isPinkyOpen) actionTriggeredThisFrame = true; statusHtml += `左手：请弹出【手枪/八字】`; break;
+                case 3: if (isThumbOpen && isIndexOpen && isMiddleOpen && isPinkyOpen && detectShake(leftHandShakeBuffer)) actionTriggeredThisFrame = true; statusHtml += `左手：请大幅摇晃手掌`; break;
+                case 4: 
+                    if (leftHandTiltBuffer.length >= 5) {
+                        let maxTwist = Math.max(...leftHandTiltBuffer);
+                        let minTwist = Math.min(...leftHandTiltBuffer);
+                        if (maxTwist - minTwist > 0.05) { 
+                            actionTriggeredThisFrame = true; 
+                        }
+                    } 
+                    statusHtml += `左手：请用力翻转手腕`; 
+                    break;
+                case 5:
+                    targetWritingPos.x = (1 - leftHand[8].x) * window.innerWidth;
+                    targetWritingPos.y = leftHand[8].y * window.innerHeight;
+                    isWriting = (pinchDist < 0.05);
+
+                    if (isWriting) {
+                        statusHtml += `左手：<span class="drawing-text">神笔墨舞中...</span>`;
+                        actionTriggeredThisFrame = true; 
+                    } else {
+                        statusHtml += `左手：捏住手指即可写字`; 
+                        actionTriggeredThisFrame = false; 
+                    }
+                    break;
+            }
+            if (actionTriggeredThisFrame) shouldPlayVideo = true;
+        } else if (isActionPlaying && currentChapter !== 5) { statusHtml += `<span style="color:#A8A397;">▶️ 正在操纵《${playNames[currentChapter-1].replace(/[《》]/g,'')}》中...</span>`; 
+        } else if (!globalRightFistActive && currentChapter !== 1) { statusHtml += `⚠️ 提示：右手必须【握拳】才能抓住木偶！`; }
+
+        if (shouldPlayVideo && !isTourActive && !hasTriggeredCurrentChapter) {
+            hasTriggeredCurrentChapter = true;
+            setTimeout(() => {
+                if (hasTriggeredCurrentChapter) {
+                    statusUi.classList.add('collapsed');
+                }
+            }, 2500);
+        }
+
+        if (globalRightFistActive || (currentChapter === 1 && shouldPlayVideo)) {
+            if (currentChapter === 5) {
+                let expectedSrc = VIDEO_SOURCES[5];
+                if (!puppetVideo.src.includes(expectedSrc)) { puppetVideo.src = expectedSrc; }
+                if (shouldPlayVideo) { if (puppetVideo.paused) puppetVideo.play().catch(e=>{});
+                } else { if (!puppetVideo.paused) puppetVideo.pause(); }
+            } else {
+                if (shouldPlayVideo && !isActionPlaying) {
+                    let expectedSrc = VIDEO_SOURCES[currentChapter];
+                    if (!puppetVideo.src.includes(expectedSrc)) { puppetVideo.src = expectedSrc; }
+                    puppetVideo.currentTime = 0; 
+                    puppetVideo.play().catch(e=>{}); 
+                    isActionPlaying = true;
+                    
+                    successSfx.currentTime = 0; 
+                    successSfx.volume = 0.8; 
+                    successSfx.play().catch(e=>console.log("音效文件尚未准备好"));
+
+                } else if (!isActionPlaying) { if (!puppetVideo.paused) puppetVideo.pause(); }
+            }
+        } else { if (!puppetVideo.paused) puppetVideo.pause(); isActionPlaying = false; }
+        
+
+        if (leftHand) { leftHandPreviousY = leftHand[0].y; }
+        
+        document.getElementById('status-text').innerHTML = statusHtml;
+    }
+</script>
+</body>
+</html>
